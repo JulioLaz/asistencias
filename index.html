@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistencias · Filosofía 6° · Prof. Lazarte</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg:       #07080f;
+            --surface:  #0d0f1e;
+            --card:     #111427;
+            --border:   #1e2240;
+            --cyan:     #00f5ff;
+            --green:    #39ff14;
+            --red:      #ff2d55;
+            --yellow:   #ffd60a;
+            --gray:     #2a2d45;
+            --text:     #c8d6e5;
+            --dim:      #5a6080;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Rajdhani', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.08) 2px,
+                rgba(0,0,0,0.08) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Fondo animado */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: gridScroll 20s linear infinite;
+            z-index: 0;
+        }
+        @keyframes gridScroll {
+            0%   { background-position: 0 0; }
+            100% { background-position: 0 40px; }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px 16px 60px;
+        }
+
+        /* HEADER */
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+            animation: fadeDown 0.8s ease both;
+        }
+        @keyframes fadeDown {
+            from { opacity:0; transform: translateY(-20px); }
+            to   { opacity:1; transform: translateY(0); }
+        }
+
+        .header-tag {
+            display: inline-block;
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--cyan);
+            border: 1px solid var(--cyan);
+            padding: 4px 14px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+
+        h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: clamp(22px, 5vw, 42px);
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 20px var(--cyan), 0 0 60px rgba(0,245,255,0.3);
+            line-height: 1.1;
+        }
+        h1 span { color: var(--cyan); }
+
+        .subtitle {
+            margin-top: 8px;
+            font-size: 15px;
+            color: var(--dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* SELECTOR TRIMESTRE */
+        .trim-selector {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            animation: fadeUp 0.6s 0.2s ease both;
+        }
+        @keyframes fadeUp {
+            from { opacity:0; transform: translateY(16px); }
+            to   { opacity:1; transform: translateY(0); }
+        }
+
+        .trim-btn {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            letter-spacing: 2px;
+            padding: 10px 24px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            cursor: pointer;
+            transition: all 0.25s;
+            text-transform: uppercase;
+        }
+        .trim-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 12px rgba(0,245,255,0.2);
+        }
+        .trim-btn.active {
+            background: rgba(0,245,255,0.1);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 20px rgba(0,245,255,0.25);
+        }
+
+        /* STATS BAR */
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            animation: fadeUp 0.6s 0.3s ease both;
+        }
+        .stat-chip {
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 10px 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-chip .val {
+            font-family: 'Orbitron', monospace;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .stat-chip.s-cyan .val { color: var(--cyan); }
+        .stat-chip.s-green .val { color: var(--green); }
+        .stat-chip.s-red   .val { color: var(--red); }
+        .stat-chip.s-yellow .val { color: var(--yellow); }
+
+        /* TABLA */
+        .table-wrapper {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            animation: fadeUp 0.6s 0.4s ease both;
+            -webkit-overflow-scrolling: touch;
+        }
+        .table-wrapper::-webkit-scrollbar { height: 6px; }
+        .table-wrapper::-webkit-scrollbar-track { background: var(--bg); }
+        .table-wrapper::-webkit-scrollbar-thumb { background: var(--cyan); }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 700px;
+        }
+
+        thead tr {
+            background: var(--card);
+            border-bottom: 2px solid var(--cyan);
+        }
+        thead th {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--cyan);
+            padding: 14px 10px;
+            text-align: center;
+            white-space: nowrap;
+            border-right: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+        }
+        thead th.th-name {
+            text-align: left;
+            padding-left: 20px;
+            min-width: 200px;
+            position: sticky;
+            left: 0;
+            background: var(--card);
+            z-index: 10;
+            border-right: 2px solid var(--cyan);
+        }
+        thead th.th-pct {
+            min-width: 90px;
+            color: var(--yellow);
+            position: sticky;
+            right: 0;
+            background: var(--card);
+            border-left: 2px solid var(--yellow);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+        tbody tr:hover { background: rgba(0,245,255,0.04); }
+        tbody tr:last-child { border-bottom: none; }
+
+        td {
+            padding: 10px 8px;
+            text-align: center;
+            border-right: 1px solid var(--border);
+            font-size: 13px;
+        }
+        td.td-name {
+            text-align: left;
+            padding-left: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #e8edf5;
+            white-space: nowrap;
+            position: sticky;
+            left: 0;
+            background: var(--surface);
+            border-right: 2px solid var(--border);
+            z-index: 5;
+        }
+        tbody tr:hover td.td-name { background: #0f1120; }
+
+        .cell-pres {
+            background: rgba(57,255,20,0.12);
+            color: var(--green);
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .cell-ause {
+            background: rgba(255,45,85,0.1);
+            color: var(--red);
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .cell-np {
+            color: var(--dim);
+            font-size: 18px;
+        }
+
+        /* BARRA % */
+        td.td-pct {
+            position: sticky;
+            right: 0;
+            background: var(--surface);
+            border-left: 2px solid var(--border);
+            min-width: 90px;
+            padding: 8px 12px;
+            z-index: 5;
+        }
+        tbody tr:hover td.td-pct { background: #0f1120; }
+        .pct-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+        .pct-bar-bg {
+            width: 100%;
+            height: 5px;
+            background: var(--gray);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .pct-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+        .pct-ok   { color: var(--green); }
+        .pct-warn { color: var(--yellow); }
+        .pct-bad  { color: var(--red); }
+        .fill-ok   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .fill-warn { background: var(--yellow); }
+        .fill-bad  { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+        /* LOADING / ERROR */
+        .state-box {
+            text-align: center;
+            padding: 60px 20px;
+            animation: pulse 1.5s ease infinite;
+        }
+        @keyframes pulse {
+            0%,100% { opacity:1; }
+            50%      { opacity:0.5; }
+        }
+        .state-box .ico { font-size: 48px; margin-bottom: 16px; }
+        .state-box .msg {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            letter-spacing: 2px;
+            color: var(--cyan);
+        }
+
+        .error-box {
+            background: rgba(255,45,85,0.1);
+            border: 1px solid var(--red);
+            padding: 20px 24px;
+            text-align: center;
+            color: var(--red);
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        /* LEYENDA */
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            animation: fadeUp 0.6s 0.5s ease both;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--dim);
+        }
+        .legend-dot {
+            width: 12px; height: 12px;
+            border-radius: 2px;
+        }
+
+        /* FOOTER */
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 12px;
+            color: var(--dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .footer span { color: var(--cyan); }
+
+        /* Fecha activa en header */
+        .date-active {
+            color: var(--yellow) !important;
+        }
+    </style>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-tag">Sistema de Asistencias 2026</div>
+        <h1>FILOSOFÍA <span>6°</span> AÑO</h1>
+        <p class="subtitle">Escuela Amado Juri · Prof. Lazarte · Miércoles</p>
+    </div>
+
+    <!-- SELECTOR TRIMESTRE -->
+    <div class="trim-selector">
+        <button class="trim-btn active" onclick="cambiarTrimestre(0)">▶ Trimestre I</button>
+        <button class="trim-btn" onclick="cambiarTrimestre(1)">▶ Trimestre II</button>
+        <button class="trim-btn" onclick="cambiarTrimestre(2)">▶ Trimestre III</button>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-bar" id="statsBar" style="display:none">
+        <div class="stat-chip s-cyan">
+            <span>👥 Alumnos</span>
+            <span class="val" id="statAlumnos">—</span>
+        </div>
+        <div class="stat-chip s-cyan">
+            <span>📅 Clases</span>
+            <span class="val" id="statClases">—</span>
+        </div>
+        <div class="stat-chip s-green">
+            <span>✅ Aprueban 80%</span>
+            <span class="val" id="statOk">—</span>
+        </div>
+        <div class="stat-chip s-red">
+            <span>⚠ En riesgo</span>
+            <span class="val" id="statRiesgo">—</span>
+        </div>
+    </div>
+
+    <!-- TABLA -->
+    <div class="table-wrapper" id="tableWrapper">
+        <div class="state-box">
+            <div class="ico">⏳</div>
+            <div class="msg">Cargando datos...</div>
+        </div>
+    </div>
+
+    <!-- LEYENDA -->
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Presente</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Ausente</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--dim)"></div> No registrado</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> ≥ 80% ✔</div>
+    </div>
+
+    <div class="footer">
+        <span>CUCHER SISTEMAS</span> · Datos actualizados desde Google Sheets
+    </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  ⚙  CONFIGURA AQUI tu URL de "Publicar en la web" CSV
+//     Sheets → Archivo → Compartir → Publicar en la web
+//     → Seleccionar hoja "Asistencias" → Formato CSV → Publicar
+// ════════════════════════════════════════════════════════
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRNVhvolJWP28tSk5J2KnbhUZNGhIgh3OryGxVgj1OGYoDZlf8mKtyAOfKsYaCJ4k2sk4KMJWbI4OQd/pub?gid=2066905651&single=true&output=csv';
+
+// ════════════════════════════════════════════════════════
+//  📅  TRIMESTRES (miércoles — modificá las fechas si cambian)
+// ════════════════════════════════════════════════════════
+const TRIMESTRES = [
+    {
+        label: 'Trimestre I',
+        fechas: [
+            '4/3/2026','11/3/2026','18/3/2026','25/3/2026',
+            '1/4/2026','8/4/2026','15/4/2026','22/4/2026','29/4/2026',
+            '6/5/2026','13/5/2026','20/5/2026','27/5/2026'
+        ]
+    },
+    {
+        label: 'Trimestre II',
+        fechas: [
+            '3/6/2026','10/6/2026','17/6/2026','24/6/2026',
+            '1/7/2026','5/8/2026','12/8/2026','19/8/2026','26/8/2026'
+        ]
+    },
+    {
+        label: 'Trimestre III',
+        fechas: [
+            '2/9/2026','9/9/2026','16/9/2026','23/9/2026','30/9/2026',
+            '7/10/2026','14/10/2026','21/10/2026','28/10/2026',
+            '4/11/2026','11/11/2026','18/11/2026'
+        ]
+    }
+];
+
+const MIN_PCT = 80;
+let trimestreActivo = 0;
+let csvData = null; // cache
+
+// ── Hoy para marcar columna activa ──────────────────────
+function hoyStr() {
+    const d = new Date();
+    return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+}
+
+// ── Cambio de trimestre ──────────────────────────────────
+function cambiarTrimestre(idx) {
+    trimestreActivo = idx;
+    document.querySelectorAll('.trim-btn').forEach((b,i) =>
+        b.classList.toggle('active', i === idx));
+    if (csvData) renderTabla(csvData);
+}
+
+// ── Fetch + Render ───────────────────────────────────────
+async function cargarDatos() {
+    setLoading();
+    try {
+        const resp = await fetch(`${CSV_URL}&t=${Date.now()}`); // evitar caché
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+            complete(results) {
+                csvData = results.data;
+                renderTabla(csvData);
+            },
+            error(err) { setError('Error al parsear CSV: ' + err.message); }
+        });
+    } catch(e) {
+        setError('No se pudo conectar con Google Sheets.<br>Verificá la URL del CSV en el código.');
+    }
+}
+
+// ── Render tabla pivote ──────────────────────────────────
+function renderTabla(data) {
+    const trim   = TRIMESTRES[trimestreActivo];
+    const fechas = trim.fechas;
+    const hoy    = hoyStr();
+
+    // Agrupar registros por NOMBRE
+    const porAlumno = {};
+    data.forEach(row => {
+        const nombre = (row['NOMBRE'] || '').trim();
+        const fecha  = (row['Fecha']  || '').trim();
+        const estado = (row['Estado'] || '').trim();
+        if (!nombre) return;
+        if (!porAlumno[nombre]) porAlumno[nombre] = {};
+        porAlumno[nombre][fecha] = estado;
+    });
+
+    const alumnos = Object.keys(porAlumno).sort();
+    if (!alumnos.length) {
+        setError('No se encontraron datos en la planilla.');
+        return;
+    }
+
+    // Stats
+    let ok = 0, riesgo = 0;
+    const pcts = {};
+    alumnos.forEach(a => {
+        let pres = 0;
+        fechas.forEach(f => {
+            if ((porAlumno[a][f] || '') === 'Presente') pres++;
+        });
+        const pct = Math.round((pres / fechas.length) * 100);
+        pcts[a] = { pres, pct };
+        if (pct >= MIN_PCT) ok++; else riesgo++;
+    });
+
+    document.getElementById('statAlumnos').textContent = alumnos.length;
+    document.getElementById('statClases').textContent  = fechas.length;
+    document.getElementById('statOk').textContent      = ok;
+    document.getElementById('statRiesgo').textContent  = riesgo;
+    document.getElementById('statsBar').style.display  = 'flex';
+
+    // Construir HTML
+    let html = `<table>
+    <thead><tr>
+        <th class="th-name">Alumno/a</th>`;
+    fechas.forEach(f => {
+        const esHoy = f === hoy;
+        const partes = f.split('/');
+        const label  = `${partes[0]}/${partes[1]}`;
+        html += `<th${esHoy ? ' class="date-active"' : ''}>${label}</th>`;
+    });
+    html += `<th class="th-pct">%</th></tr></thead><tbody>`;
+
+    alumnos.forEach(alumno => {
+        html += `<tr><td class="td-name">${alumno}</td>`;
+        fechas.forEach(f => {
+            const estado = porAlumno[alumno][f] || null;
+            if (estado === 'Presente') {
+                html += `<td class="cell-pres" title="Presente · ${f}">✔</td>`;
+            } else if (estado === 'Ausente') {
+                html += `<td class="cell-ause" title="Ausente · ${f}">✖</td>`;
+            } else {
+                html += `<td class="cell-np" title="Sin registro · ${f}">·</td>`;
+            }
+        });
+
+        const { pres, pct } = pcts[alumno];
+        const cls  = pct >= MIN_PCT ? 'ok'  : pct >= 60 ? 'warn' : 'bad';
+        const fcls = pct >= MIN_PCT ? 'fill-ok' : pct >= 60 ? 'fill-warn' : 'fill-bad';
+        html += `
+        <td class="td-pct">
+            <div class="pct-label pct-${cls}">${pct}%</div>
+            <div class="pct-bar-bg">
+                <div class="pct-bar-fill ${fcls}" style="width:${pct}%"></div>
+            </div>
+        </td></tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('tableWrapper').innerHTML = html;
+}
+
+function setLoading() {
+    document.getElementById('tableWrapper').innerHTML = `
+        <div class="state-box">
+            <div class="ico">⏳</div>
+            <div class="msg">Cargando datos...</div>
+        </div>`;
+}
+
+function setError(msg) {
+    document.getElementById('tableWrapper').innerHTML =
+        `<div class="error-box">⚠ ${msg}</div>`;
+}
+
+// ── Init ─────────────────────────────────────────────────
+cargarDatos();
+</script>
+</body>
+</html>
