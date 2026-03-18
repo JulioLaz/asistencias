@@ -455,7 +455,8 @@
 //     Sheets → Archivo → Compartir → Publicar en la web
 //     → Seleccionar hoja "Asistencias" → Formato CSV → Publicar
 // ════════════════════════════════════════════════════════
-const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRNVhvolJWP28tSk5J2KnbhUZNGhIgh3OryGxVgj1OGYoDZlf8mKtyAOfKsYaCJ4k2sk4KMJWbI4OQd/pub?gid=2066905651&single=true&output=csv';
+const CSV_URL         = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRNVhvolJWP28tSk5J2KnbhUZNGhIgh3OryGxVgj1OGYoDZlf8mKtyAOfKsYaCJ4k2sk4KMJWbI4OQd/pub?gid=2066905651&single=true&output=csv';
+const CSV_ALUMNOS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRNVhvolJWP28tSk5J2KnbhUZNGhIgh3OryGxVgj1OGYoDZlf8mKtyAOfKsYaCJ4k2sk4KMJWbI4OQd/pub?gid=1287444107&single=true&output=csv';
 
 // ════════════════════════════════════════════════════════
 //  📅  TRIMESTRES (miércoles — modificá las fechas si cambian)
@@ -510,39 +511,62 @@ function cambiarTrimestre(idx) {
     if (csvData) renderTabla(csvData);
 }
 
+// ── Fetch CSV helper ─────────────────────────────────────
+function fetchCSV(url) {
+    return new Promise((resolve, reject) => {
+        fetch(url + '&t=' + Date.now(), { cache: 'no-store' })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+            .then(text => Papa.parse(text, {
+                header: true, skipEmptyLines: true,
+                complete: r => resolve(r.data),
+                error:    e => reject(e)
+            }))
+            .catch(reject);
+    });
+}
+
 // ── Fetch + Render ───────────────────────────────────────
 async function cargarDatos() {
     setLoading();
 
-    // Si se abre como archivo local, CORS bloquea el fetch
     if (window.location.protocol === 'file:') {
         setError(
             'Estás abriendo el archivo localmente (file://).<br><br>' +
             'El navegador bloquea conexiones a Google Sheets en modo local.<br>' +
-            '<b>Subí el HTML a GitHub Pages</b> y funcionará sin problemas.<br><br>' +
-            '<small>Alternativa local: ejecutá <code>python -m http.server</code> en la carpeta.</small>'
+            '<b>Subí el HTML a GitHub Pages</b> y funcionará sin problemas.'
         );
         return;
     }
 
     try {
-        const url = CSV_URL + '&t=' + Date.now();
-        const resp = await fetch(url, { cache: 'no-store' });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const text = await resp.text();
-        Papa.parse(text, {
-            header: true,
-            skipEmptyLines: true,
-            complete(results) {
-                if (!results.data.length) {
-                    setError('La planilla está vacía o las columnas no coinciden.');
-                    return;
-                }
-                csvData = results.data;
-                renderTabla(csvData);
-            },
-            error(err) { setError('Error al parsear CSV: ' + err.message); }
+        // Cargar ambas hojas en paralelo
+        const [asistencias, alumnos] = await Promise.all([
+            fetchCSV(CSV_URL),
+            fetchCSV(CSV_ALUMNOS_URL)
+        ]);
+
+        if (!asistencias.length || !alumnos.length) {
+            setError('Una o ambas hojas están vacías. Verificá que estén publicadas como CSV.');
+            return;
+        }
+
+        // Mapa DNI → Nombre desde hoja Alumnos
+        const dniNombre = {};
+        alumnos.forEach(row => {
+            const dni    = (row['DNI'] || '').trim();
+            const nombre = (row['Apellido y Nombre'] || '').trim();
+            if (dni && nombre) dniNombre[dni] = nombre;
         });
+
+        // Enriquecer asistencias con nombre desde dniNombre
+        asistencias.forEach(row => {
+            const dni = (row['DNI Alumno'] || '').trim();
+            row['_NOMBRE'] = dniNombre[dni] || ('DNI ' + dni);
+        });
+
+        csvData = { asistencias, dniNombre };
+        renderTabla(csvData);
+
     } catch(e) {
         setError('No se pudo conectar con Google Sheets.<br><small>' + e.message + '</small>');
     }
@@ -555,17 +579,25 @@ function renderTabla(data) {
     const hoy     = hoyStr();
     const hoyDate = parseFecha(hoy);
 
-    // Agrupar registros por NOMBRE y detectar fechas con registros
+    const { asistencias, dniNombre } = data;
+
+    // Agrupar registros por NOMBRE (desde dniNombre) y detectar fechas con registros
     const porAlumno = {};
     const fechasConRegistro = new Set();
-    data.forEach(row => {
-        const nombre = (row['NOMBRE'] || '').trim();
-        const fecha  = (row['Fecha']  || '').trim();
-        const estado = (row['Estado'] || '').trim();
+    asistencias.forEach(row => {
+        const dni    = (row['DNI Alumno'] || '').trim();
+        const nombre = row['_NOMBRE'] || ('DNI ' + dni);
+        const fecha  = (row['Fecha']   || '').trim();
+        const estado = (row['Estado']  || '').trim();
         if (!nombre || !fecha) return;
         if (!porAlumno[nombre]) porAlumno[nombre] = {};
         porAlumno[nombre][fecha] = estado;
         fechasConRegistro.add(fecha);
+    });
+
+    // Asegurar que todos los alumnos del padrón aparezcan aunque no tengan asistencias aún
+    Object.values(dniNombre).forEach(nombre => {
+        if (!porAlumno[nombre]) porAlumno[nombre] = {};
     });
 
     const alumnos = Object.keys(porAlumno).sort();
