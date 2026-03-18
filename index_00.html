@@ -277,11 +277,6 @@
             color: var(--dim);
             font-size: 18px;
         }
-        .cell-sc {
-            background: rgba(255,214,10,0.08);
-            color: var(--yellow);
-            font-size: 15px;
-        }
 
         /* BARRA % */
         td.td-pct {
@@ -439,11 +434,12 @@
         <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Presente</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Ausente</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--dim)"></div> No registrado</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--yellow); opacity:0.5"></div> ⚠️ Sin clases</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> ≥ 80% ✔</div>
     </div>
 
-
+    <div class="footer">
+        <span>CUCHER SISTEMAS</span> · Datos actualizados desde Google Sheets
+    </div>
 
 </div>
 
@@ -505,38 +501,21 @@ function cambiarTrimestre(idx) {
 // ── Fetch + Render ───────────────────────────────────────
 async function cargarDatos() {
     setLoading();
-
-    // Si se abre como archivo local, CORS bloquea el fetch
-    if (window.location.protocol === 'file:') {
-        setError(
-            'Estás abriendo el archivo localmente (file://).<br><br>' +
-            'El navegador bloquea conexiones a Google Sheets en modo local.<br>' +
-            '<b>Subí el HTML a GitHub Pages</b> y funcionará sin problemas.<br><br>' +
-            '<small>Alternativa local: ejecutá <code>python -m http.server</code> en la carpeta.</small>'
-        );
-        return;
-    }
-
     try {
-        const url = CSV_URL + '&t=' + Date.now();
-        const resp = await fetch(url, { cache: 'no-store' });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const resp = await fetch(`${CSV_URL}&t=${Date.now()}`); // evitar caché
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const text = await resp.text();
         Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
             complete(results) {
-                if (!results.data.length) {
-                    setError('La planilla está vacía o las columnas no coinciden.');
-                    return;
-                }
                 csvData = results.data;
                 renderTabla(csvData);
             },
             error(err) { setError('Error al parsear CSV: ' + err.message); }
         });
     } catch(e) {
-        setError('No se pudo conectar con Google Sheets.<br><small>' + e.message + '</small>');
+        setError('No se pudo conectar con Google Sheets.<br>Verificá la URL del CSV en el código.');
     }
 }
 
@@ -546,17 +525,15 @@ function renderTabla(data) {
     const fechas = trim.fechas;
     const hoy    = hoyStr();
 
-    // Agrupar registros por NOMBRE y detectar fechas con registros
+    // Agrupar registros por NOMBRE
     const porAlumno = {};
-    const fechasConRegistro = new Set();
     data.forEach(row => {
         const nombre = (row['NOMBRE'] || '').trim();
         const fecha  = (row['Fecha']  || '').trim();
         const estado = (row['Estado'] || '').trim();
-        if (!nombre || !fecha) return;
+        if (!nombre) return;
         if (!porAlumno[nombre]) porAlumno[nombre] = {};
         porAlumno[nombre][fecha] = estado;
-        fechasConRegistro.add(fecha);
     });
 
     const alumnos = Object.keys(porAlumno).sort();
@@ -570,13 +547,10 @@ function renderTabla(data) {
     const pcts = {};
     alumnos.forEach(a => {
         let pres = 0;
-        // Solo contar fechas donde hubo clase
-        const fechasEfectivas = fechas.filter(f => fechasConRegistro.has(f));
-        fechasEfectivas.forEach(f => {
+        fechas.forEach(f => {
             if ((porAlumno[a][f] || '') === 'Presente') pres++;
         });
-        const base = fechasEfectivas.length || 1;
-        const pct = Math.round((pres / base) * 100);
+        const pct = Math.round((pres / fechas.length) * 100);
         pcts[a] = { pres, pct };
         if (pct >= MIN_PCT) ok++; else riesgo++;
     });
@@ -603,10 +577,7 @@ function renderTabla(data) {
         html += `<tr><td class="td-name">${alumno}</td>`;
         fechas.forEach(f => {
             const estado = porAlumno[alumno][f] || null;
-            const hayClase = fechasConRegistro.has(f);
-            if (!hayClase) {
-                html += `<td class="cell-sc" title="Sin clases · ${f}">⚠️</td>`;
-            } else if (estado === 'Presente') {
+            if (estado === 'Presente') {
                 html += `<td class="cell-pres" title="Presente · ${f}">✔</td>`;
             } else if (estado === 'Ausente') {
                 html += `<td class="cell-ause" title="Ausente · ${f}">✖</td>`;
