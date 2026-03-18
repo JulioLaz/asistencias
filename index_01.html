@@ -494,12 +494,6 @@ function hoyStr() {
     return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
 }
 
-// ── Parsear fecha d/m/yyyy → Date (sin hora) ─────────────
-function parseFecha(str) {
-    const [d, m, y] = str.split('/').map(Number);
-    return new Date(y, m - 1, d);
-}
-
 // ── Cambio de trimestre ──────────────────────────────────
 function cambiarTrimestre(idx) {
     trimestreActivo = idx;
@@ -550,8 +544,7 @@ async function cargarDatos() {
 function renderTabla(data) {
     const trim   = TRIMESTRES[trimestreActivo];
     const fechas = trim.fechas;
-    const hoy     = hoyStr();
-    const hoyDate = parseFecha(hoy);
+    const hoy    = hoyStr();
 
     // Agrupar registros por NOMBRE y detectar fechas con registros
     const porAlumno = {};
@@ -577,10 +570,8 @@ function renderTabla(data) {
     const pcts = {};
     alumnos.forEach(a => {
         let pres = 0;
-        // Solo fechas pasadas/hoy donde hubo clase
-        const fechasEfectivas = fechas.filter(f =>
-            fechasConRegistro.has(f) && parseFecha(f) <= hoyDate
-        );
+        // Solo contar fechas donde hubo clase
+        const fechasEfectivas = fechas.filter(f => fechasConRegistro.has(f));
         fechasEfectivas.forEach(f => {
             if ((porAlumno[a][f] || '') === 'Presente') pres++;
         });
@@ -611,12 +602,9 @@ function renderTabla(data) {
     alumnos.forEach(alumno => {
         html += `<tr><td class="td-name">${alumno}</td>`;
         fechas.forEach(f => {
-            const estado    = porAlumno[alumno][f] || null;
-            const hayClase  = fechasConRegistro.has(f);
-            const esFutura  = parseFecha(f) > hoyDate;
-            if (esFutura) {
-                html += `<td class="cell-np" title="Pendiente · ${f}">·</td>`;
-            } else if (!hayClase) {
+            const estado = porAlumno[alumno][f] || null;
+            const hayClase = fechasConRegistro.has(f);
+            if (!hayClase) {
                 html += `<td class="cell-sc" title="Sin clases · ${f}">⚠️</td>`;
             } else if (estado === 'Presente') {
                 html += `<td class="cell-pres" title="Presente · ${f}">✔</td>`;
